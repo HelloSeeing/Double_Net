@@ -7,6 +7,8 @@ import time
 from PIL import Image
 import random
 
+import line_profiler
+
 class Transform:
     def __init__(self):
         self._color_balance = data_augment.Color_Balance()
@@ -71,9 +73,10 @@ class PY_Reader:
 
         self.transform = Transform()
 
+    @profile
     def _read_py_function(self, image1_fname, image2_fname):
-        image1_decoded = np.array(Image.open(image1_fname)).astype(np.uint8)
-        image2_decoded = np.array(Image.open(image2_fname)).astype(np.uint8)
+        image1_decoded = cv2.imread(image1_fname)
+        image2_decoded = cv2.imread(image2_fname)
         return image1_decoded, image2_decoded
 
     def _resize_function(self, image1_decoded, image2_decoded):
@@ -81,6 +84,7 @@ class PY_Reader:
         image2_resized = cv2.resize(image2_decoded, (self.default_image_height, self.default_image_width))
         return image1_resized, image2_resized
 
+    @profile
     def read(self, image1_fnames, image2_fnames):
         """
         read images1_fnames to images and images2_fnames in python
@@ -91,10 +95,7 @@ class PY_Reader:
         for image1_fname, image2_fname in zip(image1_fnames, image2_fnames):
             img1, img2 = self._read_py_function(image1_fname, image2_fname)
             if self.do_data_augment is not None:
-                if 'center_expand' in self.do_data_augment:
-                  img1, img2 = self.transform.center_expand(img1, img2, target_size)
-                else:
-                  img1, img2 = self._resize_function(img1, img2)
+                img1, img2 = self._resize_function(img1, img2)
                 if 'rotate' in self.do_data_augment:
                   img1, img2 = self.transform.rotate_90(img1, img2)
                 if 'color_balance' in self.do_data_augment:
@@ -120,6 +121,7 @@ class PY_Reader:
 class PY_Parser:
     def __init__(self,
                  records_list_fname,
+                 data_root = None,
                  default_image_height = 256,
                  default_image_width = 256,
                  image_depth = 3,
@@ -128,6 +130,7 @@ class PY_Parser:
                  num_epochs = 1,
                  do_shuffle = False):
         self.records_list_fname = records_list_fname
+        self.data_root = data_root
         self.image1_names, self.image2_names, self.labels = self._parse_listfile(self.records_list_fname)
         self.reader = PY_Reader(default_image_height, default_image_width, image_depth, do_data_augment)
         self.batch_size = batch_size
@@ -160,8 +163,12 @@ class PY_Parser:
     def _parse_listfile(self, records_list_fname):
         with open(records_list_fname, 'r') as fid:
             lines = fid.readlines()
-        image1_names = [line.strip().split()[0] for line in lines]
-        image2_names = [line.strip().split()[1] for line in lines]
+        if self.data_root is None:
+            image1_names = [line.strip().split()[0] for line in lines]
+            image2_names = [line.strip().split()[1] for line in lines]
+        else:
+            image1_names = [os.path.join(self.data_root, line.strip().split()[0]) for line in lines]
+            image2_names = [os.path.join(self.data_root, line.strip().split()[1]) for line in lines]
         labels = [int(line.strip().split()[2]) for line in lines]
         return image1_names, image2_names, labels
 
@@ -182,6 +189,7 @@ class PY_Parser:
     def __iter__(self):
         return self
 
+    @profile
     def next(self):
         """
         Iteration in getting images and labels from records_list_fname
@@ -227,15 +235,16 @@ class PY_Parser:
         return len(self.image1_names)
 
 def main():
-    records_list_fname = '/home/dxh/skin_doctor/Trainer/U-net_Trainer/data/isic_2017/segments.trainval'
+    data_root = '/home/dxh/skin_doctor/Trainer/U-net_Trainer/data/isic_2017'
+    records_list_fname = 'images.double_net'
     batch_size = 20
     data_augments = ['flip']
-    data_parser = PY_Parser(records_list_fname=records_list_fname, batch_size = batch_size, do_data_augment=data_augments)
+    data_parser = PY_Parser(records_list_fname=records_list_fname, data_root=data_root, batch_size = batch_size, do_data_augment=data_augments)
 
     cnt = 0
     t0 = time.time()
     t1 = t0
-    for images1, images2 in data_parser:
+    for images1, images2, _ in data_parser:
         curr_time = time.time()
         print '{}: {} {} cost time {}'.format(cnt, images1.shape, images2.shape, curr_time - t1)
         t1 = curr_time
@@ -244,4 +253,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
