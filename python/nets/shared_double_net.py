@@ -47,5 +47,6 @@ class Shared_Double_Net:
     feat_map2, endpts2 = self.cnn_model.forward(inputs=image2, is_training=is_training, reuse=True)
     logit, endpts = self.concat_model.forward(feat_map1, feat_map2, is_training=is_training, scope='Linear')
     return logit, endpts1, endpts2, endpts
-  def arg_scope(self, weight_decay=0.0005):
-    return resnet_utils.resnet_arg_scope(weight_decay=weight_decay)
+
+  def arg_scope(self, weight_decay=0.0005, is_training=None):
+    return resnet_utils.resnet_arg_scope(weight_decay=weight_decay, is_training=None)
